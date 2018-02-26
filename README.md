@@ -1,5 +1,10 @@
 # MagnasineMagPy
-A tool for monitoring a Magnum inverter using Python and a RS485 to serial converter
+A tool for monitoring a Magnum inverter using Python and a RS485 to serial converter. 
+
+### Credits
+Chris (aka user cpfl) Midnightsolar forum.
+Author: Paul Alting van Geusau
+Modifications by: Liam O'Brien
 
 ## Backstory
 After purchasing a Magnum MS4488PAE inverter to use with my off-grid power setup I wanted a way to monitor and control the system
