@@ -48,8 +48,9 @@ import argparse
 
 import paho.mqtt.client as mqtt #import the client1
 
-broker_address="test.mosquitto.org"
-client = mqtt.Client("maginverter") #create new instance
+broker_address="localhost"
+client = mqtt.Client("magnum") #create new instance
+client.username_pw_set("emonpi", password="emonpimqtt2016")
 
 try:
     client.connect(broker_address, port=1883) #connect to broker
@@ -455,6 +456,27 @@ class remote_base_proto():
             self.equalise_volts = self.absorb_volts + (ord(packet_buffer[34]) * 4 / 10.0)
             
         self.absorb_time = ord(packet_buffer[35]) / 10.0                 # as decimal hours, 2.5 is 2 hours 30 minutes
+        
+    # remote_base send function:
+    def encode(self, packet_buffer):
+        global system_bus_volts
+
+        self.status_code = 0x00
+        self.search_watts = 0x05
+        self.battery_size = 0x22 #220Ah
+        self.battery_type = 0xF6 #246 = 24.6V * 2 =
+        self.charger_amps = 0x1e  # 1e = 30%  % of charger capacity
+        self.shore_ac_amps = 0x0a
+        self.revision = 0x16 # V2.2
+        self.parallel_threshold = 0x08
+        self.force_charge = 0x10 #disable refloat
+        self.genstart_auto = 0x00
+        self.battery_low_trip = 0xF7 #24.7V * 2 = 49.4V
+        self.volts_ac_trip = 0x9B # 80VAC
+        self.float_volts = ord(packet_buffer[33]) * 4 / 10.0
+        # value added to absorption volts to give equalize volts range 0 - 2 volts
+        self.equalise_volts = self.absorb_volts + (ord(packet_buffer[34]) * 4 / 10.0)
+        self.absorb_time = 0x0F # as decimal hours, 1.5hr = 15
 
 
 class remote_A0_proto():
@@ -1062,7 +1084,7 @@ def main():
         if (AGS1.ags_revision != 0):
           client.publish("inverter/ags-rev", remote_A0_agsA1.ags_revision)
   
-        acwatts = int(inverter.volts_ac_out*(inverter.amps_ac_in-inverter.amps_ac_out))
+        acwatts = int((inverter.volts_ac_out)*(inverter.amps_ac_in-inverter.amps_ac_out)) #assumes symmetric load across phases
         dcwatts = inverter.volts_dc*inverter.amps_dc
         eff = round(abs(safeDiv(acwatts, dcwatts)*100), 2) #extra function prevents divide by zero error if power is 0
         
@@ -1074,16 +1096,17 @@ def main():
         client.publish("inverter/ac/iin", inverter.amps_ac_in)
         client.publish("inverter/ac/iout", inverter.amps_ac_out)
         client.publish("inverter/ac/freq", inverter.frequency_ac_out)
-        
+	client.publish("inverter/ac/power", acwatts)        
+
         #DC readings
         client.publish("inverter/dc/vin", inverter.volts_dc)
         client.publish("inverter/dc/iout", inverter.amps_dc)
         client.publish("inverter/dc/power", inverter.volts_dc*inverter.amps_dc)
     
         #Inverter thermal readings
-        client.publish("inverter/thermal/battemp", int(1.8 * inverter.temp_battery + 32))
-        client.publish("inverter/thermal/xfmrtemp", int(1.8 * inverter.temp_transformer + 32))
-        client.publish("inverter/thermal/fettemp", int(1.8 * inverter.temp_FET + 32))
+        client.publish("inverter/thermal/battemp", int(inverter.temp_battery))
+        client.publish("inverter/thermal/xfmrtemp", int(inverter.temp_transformer))
+        client.publish("inverter/thermal/fettemp", int(inverter.temp_FET))
 
 #    application report function:
     def report_results():
@@ -1203,6 +1226,7 @@ def main():
 
     mainLoop()
 
+t=time.time()
 #application entry point:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1219,4 +1243,6 @@ if __name__ == "__main__":
     
     system_bus_volts = 0    # set as global variable:
     while True:
-        main()                  # call the main function:
+	if time.time()-t > 5:
+            main()
+            t=time.time()
